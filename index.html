@@ -4,15 +4,32 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Image Mask Generator</title>
+  <style>
+    .options {
+        position: fixed;
+        right: 0;
+        top: 0;
+        display: flex;
+        flex-direction: column;
+        background-color: rgba(255, 255, 255, 0.3);
+        gap: 4px;
+        padding: 8px;
+    }
+  </style>
 </head>
 <body>
   <canvas id="canvas" width="640" height="480"></canvas>
   <br>
+  <div class="options">
   <label for="threshold">Threshold: </label>
   <input type="range" id="threshold" name="threshold" min="0" max="255" value="32">
   <span id="thresholdValue">32</span>
   <button id="undo">Undo</button>
+  <input type="file" id="uploadImage" accept="image/*" style="display:none;">
+  <button id="uploadImageButton">Upload Image</button>
   <button id="saveMask">Save Mask</button>
+  <button id="saveImageWithMask">Save Image With Mask</button>
+  </div>
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -20,6 +37,9 @@
     const thresholdValueSpan = document.getElementById('thresholdValue');
     const undoButton = document.getElementById('undo');
     const saveMaskButton = document.getElementById('saveMask');
+    const saveImageWithMaskButton = document.getElementById('saveImageWithMask');
+    const uploadImageInput = document.getElementById('uploadImage');
+    const uploadImageButton = document.getElementById('uploadImageButton');
 
     const stateStack = [];
 
@@ -27,6 +47,8 @@
     const image = new Image();
     image.src = 'Most-Beautiful-House-in-the-World.jpg';
     image.onload = () => {
+      canvas.width = image.width;
+      canvas.height = image.height;
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
       saveState();
     };
@@ -70,6 +92,34 @@
       link.download = 'mask.png';
       link.click();
     }
+
+    // Save the image with the mask layered on top
+    function saveImageWithMask() {
+    const combinedCanvas = document.createElement('canvas');
+    combinedCanvas.width = canvas.width;
+    combinedCanvas.height = canvas.height;
+    const combinedCtx = combinedCanvas.getContext('2d');
+
+    // Draw the original image
+    combinedCtx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    // Draw the mask on top of the image
+    const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < currentImageData.data.length; i += 4) {
+        if (currentImageData.data[i] === 255 && currentImageData.data[i + 1] === 0 && currentImageData.data[i + 2] === 0) {
+        // Red color found
+        combinedCtx.fillStyle = 'rgba(255, 0, 0, 1)';
+        combinedCtx.fillRect((i / 4) % canvas.width, Math.floor(i / 4 / canvas.width), 1, 1);
+        }
+    }
+
+    const dataUrl = combinedCanvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = 'image_with_mask.png';
+    link.click();
+    }
+
 
     // Flood-fill algorithm
     function floodFill(x, y, targetColor, replacementColor, tolerance) {
@@ -134,6 +184,36 @@
     // Save Mask button click event listener
     saveMaskButton.addEventListener('click', () => {
       saveMask();
+    });
+
+        // Save Image With Mask button click event listener
+    saveImageWithMaskButton.addEventListener('click', () => {
+        saveImageWithMask();
+    });
+
+    // Upload Image input change event listener
+    uploadImageInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const newImage = new Image();
+          newImage.src = e.target.result;
+          newImage.onload = () => {
+            canvas.width = newImage.width;
+            canvas.height = newImage.height;
+            ctx.drawImage(newImage, 0, 0, canvas.width, canvas.height);
+            image.src = newImage.src;
+            saveState();
+          };
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Upload Image button click event listener
+    uploadImageButton.addEventListener('click', () => {
+      uploadImageInput.click();
     });
   </script>
 </body>
