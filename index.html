@@ -25,6 +25,7 @@
   <input type="range" id="threshold" name="threshold" min="0" max="255" value="32">
   <span id="thresholdValue">32</span>
   <button id="undo">Undo</button>
+  <button id="eraser">Eraser</button>
   <input type="file" id="uploadImage" accept="image/*" style="display:none;">
   <button id="uploadImageButton">Upload Image</button>
   <button id="saveMask">Save Mask</button>
@@ -40,6 +41,7 @@
     const saveImageWithMaskButton = document.getElementById('saveImageWithMask');
     const uploadImageInput = document.getElementById('uploadImage');
     const uploadImageButton = document.getElementById('uploadImageButton');
+    const eraserButton = document.getElementById('eraser');
 
     const stateStack = [];
 
@@ -165,6 +167,8 @@
 
     // Canvas click event listener
     canvas.addEventListener('click', (event) => {
+      if (eraserEnabled) return;
+
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor(event.clientX - rect.left);
       const y = Math.floor(event.clientY - rect.top);
@@ -176,6 +180,70 @@
       floodFill(x, y, targetColor, replacementColor, tolerance);
       saveState();
     });
+
+    let eraserEnabled = false;
+
+    function enableEraser() {
+        eraserEnabled = true;
+        canvas.style.cursor = 'crosshair';
+    }
+
+    function disableEraser() {
+        eraserEnabled = false;
+        canvas.style.cursor = 'default';
+    }
+
+    function toggleEraser() {
+        if (eraserEnabled) {
+            disableEraser();
+        } else {
+            enableEraser();
+        }
+    }
+
+    // Eraser button click event listener
+    eraserButton.addEventListener('click', () => {
+        toggleEraser();
+    });
+
+    // Canvas mousemove event listener for erasing while dragging
+    canvas.addEventListener('mousemove', (event) => {
+        if (!eraserEnabled || !event.buttons) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor(event.clientX - rect.left);
+        const y = Math.floor(event.clientY - rect.top);
+        const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const originalImageData = stateStack[0];
+
+        // Erase red pixels within a circle around the cursor
+        const eraseRadius = 5;
+        for (let dy = -eraseRadius; dy <= eraseRadius; dy++) {
+            for (let dx = -eraseRadius; dx <= eraseRadius; dx++) {
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= eraseRadius) {
+                    const targetX = x + dx;
+                    const targetY = y + dy;
+                    if (targetX >= 0 && targetX < canvas.width && targetY >= 0 && targetY < canvas.height) {
+                    const index = (targetY * canvas.width + targetX) * 4;
+                    const isRed = currentImageData.data[index] === 255 && currentImageData.data[index + 1] === 0 && currentImageData.data[index + 2] === 0;
+                    if (isRed) {
+                        const originalColor = [
+                        originalImageData.data[index],
+                        originalImageData.data[index + 1],
+                        originalImageData.data[index + 2],
+                        originalImageData.data[index + 3],
+                        ];
+                        ctx.fillStyle = `rgba(${originalColor.join(',')})`;
+                        ctx.fillRect(targetX, targetY, 1, 1);
+                    }
+                    }
+                }
+            }
+        }
+    });
+
+
 
     // Undo button click event listener
     undoButton.addEventListener('click', () => {
