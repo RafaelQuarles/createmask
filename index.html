@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Mask Generator</title>
+</head>
+<body>
+  <canvas id="canvas" width="640" height="480"></canvas>
+  <br>
+  <label for="threshold">Threshold: </label>
+  <input type="range" id="threshold" name="threshold" min="0" max="255" value="32">
+  <span id="thresholdValue">32</span>
+  <button id="undo">Undo</button>
+  <button id="saveMask">Save Mask</button>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const thresholdInput = document.getElementById('threshold');
+    const thresholdValueSpan = document.getElementById('thresholdValue');
+    const undoButton = document.getElementById('undo');
+    const saveMaskButton = document.getElementById('saveMask');
+
+    const stateStack = [];
+
+    // Load image onto the canvas
+    const image = new Image();
+    image.src = 'Most-Beautiful-House-in-the-World.jpg';
+    image.onload = () => {
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      saveState();
+    };
+
+    // Save canvas state
+    function saveState() {
+      const state = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      stateStack.push(state);
+    }
+
+    // Restore canvas state
+    function restoreState() {
+      if (stateStack.length > 1) {
+        stateStack.pop();
+        const prevState = stateStack[stateStack.length - 1];
+        ctx.putImageData(prevState, 0, 0);
+      }
+    }
+
+    // Save mask as PNG
+    function saveMask() {
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = canvas.width;
+      maskCanvas.height = canvas.height;
+      const maskCtx = maskCanvas.getContext('2d');
+
+      const originalImageData = stateStack[0];
+      const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < currentImageData.data.length; i += 4) {
+        if (currentImageData.data[i] === 255 && currentImageData.data[i + 1] === 0 && currentImageData.data[i + 2] === 0) {
+          // Red color found
+          maskCtx.fillStyle = 'black';
+          maskCtx.fillRect((i / 4) % canvas.width, Math.floor(i / 4 / canvas.width), 1, 1);
+        }
+      }
+
+      const dataUrl = maskCanvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = 'mask.png';
+      link.click();
+    }
+
+    // Flood-fill algorithm
+    function floodFill(x, y, targetColor, replacementColor, tolerance) {
+      const stack = [[x, y]];
+      const visited = new Set();
+
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        const key = `${x},${y}`;
+
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        const currentColor = ctx.getImageData(x, y, 1, 1).data;
+        if (colorDistance(currentColor, targetColor) <= tolerance) {
+          ctx.fillStyle = `rgba(${replacementColor.join(',')})`;
+          ctx.fillRect(x, y, 1, 1);
+
+          for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+            const nx = x + dx;
+            const ny = y + dy;
+
+            if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
+              stack.push([nx, ny]);
+            }
+          }
+        }
+      }
+    }
+
+    // Color distance function
+    function colorDistance(color1, color2) {
+      const rDiff = color1[0] - color2[0];
+      const gDiff = color1[1] - color2[1];
+      const bDiff = color1[2] - color2[2];
+      return Math.sqrt(rDiff * rDiff + gDiff * gDiff + bDiff * bDiff);
+    }
+
+    // Update threshold value display
+    thresholdInput.addEventListener('input', () => {
+      thresholdValueSpan.textContent = thresholdInput.value;
+    });
+
+    // Canvas click event listener
+    canvas.addEventListener('click', (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor(event.clientX - rect.left);
+      const y = Math.floor(event.clientY - rect.top);
+
+      const targetColor = ctx.getImageData(x, y, 1, 1).data;
+      const replacementColor = [255, 0, 0, 255]; // Red color for the mask layer
+      const tolerance = parseInt(thresholdInput.value);
+
+      floodFill(x, y, targetColor, replacementColor, tolerance);
+      saveState();
+    });
+
+    // Undo button click event listener
+    undoButton.addEventListener('click', () => {
+      restoreState();
+    });
+    // Save Mask button click event listener
+    saveMaskButton.addEventListener('click', () => {
+      saveMask();
+    });
+  </script>
+</body>
+</html>
